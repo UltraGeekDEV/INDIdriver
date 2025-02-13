@@ -11,7 +11,7 @@
 
 */
 
-#include "simple_telescope_simulator.h"
+#include "./SG1.h"
 
 #include "indicom.h"
 
@@ -19,15 +19,14 @@
 
 using namespace INDI::AlignmentSubsystem;
 
-// We declare an auto pointer to ScopeSim.
-std::unique_ptr<ScopeSim> telescope_sim(new ScopeSim());
+// We declare an auto pointer to SG1.
+std::unique_ptr<SG1> telescope_sim(new SG1());
 
-ScopeSim::ScopeSim() :
-    DBG_SIMULATOR(INDI::Logger::getInstance().addDebugLevel("Simulator Verbose", "SIMULATOR"))
+SG1::SG1() : DBG_SG1(INDI::Logger::getInstance().addDebugLevel("SG1 status","SG1"))
 {
 }
 
-bool ScopeSim::Abort()
+bool SG1::Abort()
 {
     if (MovementNSSP.getState() == IPS_BUSY)
     {
@@ -61,30 +60,30 @@ bool ScopeSim::Abort()
     return true;
 }
 
-bool ScopeSim::canSync()
+bool SG1::canSync()
 {
     return true;
 }
 
-bool ScopeSim::Connect()
+bool SG1::Connect()
 {
-    SetTimer(getCurrentPollingPeriod());
+    SetTimer(200);
     return true;
 }
 
-bool ScopeSim::Disconnect()
+bool SG1::Disconnect()
 {
     return true;
 }
 
-const char *ScopeSim::getDefaultName()
+const char *SG1::getDefaultName()
 {
     return (const char *)"Simple Telescope Simulator";
 }
 
-bool ScopeSim::Goto(double ra, double dec)
+bool SG1::Goto(double ra, double dec)
 {
-    DEBUGF(DBG_SIMULATOR, "Goto - Celestial reference frame target right ascension %lf(%lf) declination %lf",
+    DEBUGF(DBG_SG1, "Goto - Celestial reference frame target right ascension %lf(%lf) declination %lf",
            ra * 360.0 / 24.0, ra, dec);
 
     if (CoordSP.isSwitchOn("TRACK"))
@@ -94,7 +93,7 @@ bool ScopeSim::Goto(double ra, double dec)
         fs_sexa(DecStr, dec, 2, 3600);
         CurrentTrackingTarget.rightascension  = ra;
         CurrentTrackingTarget.declination = dec;
-        DEBUG(DBG_SIMULATOR, "Goto - tracking requested");
+        DEBUG(DBG_SG1, "Goto - tracking requested");
     }
 
     // Call the alignment subsystem to translate the celestial reference frame coordinate
@@ -138,7 +137,7 @@ bool ScopeSim::Goto(double ra, double dec)
     // My altitude encoder runs -90 to +90
     if ((AltAz.altitude > 90.0) || (AltAz.altitude < -90.0))
     {
-        DEBUG(DBG_SIMULATOR, "Goto - Altitude out of range");
+        DEBUG(DBG_SG1, "Goto - Altitude out of range");
         // This should not happen
         return false;
     }
@@ -146,18 +145,18 @@ bool ScopeSim::Goto(double ra, double dec)
     // My polar encoder runs 0 to +360
     if ((AltAz.azimuth > 360.0) || (AltAz.azimuth < -360.0))
     {
-        DEBUG(DBG_SIMULATOR, "Goto - Azimuth out of range");
+        DEBUG(DBG_SG1, "Goto - Azimuth out of range");
         // This should not happen
         return false;
     }
 
     if (AltAz.azimuth < 0.0)
     {
-        DEBUG(DBG_SIMULATOR, "Goto - Azimuth negative");
+        DEBUG(DBG_SG1, "Goto - Azimuth negative");
         AltAz.azimuth = 360.0 + AltAz.azimuth;
     }
 
-    DEBUGF(DBG_SIMULATOR, "Goto - Scope reference frame target altitude %lf azimuth %lf", AltAz.altitude,
+    DEBUGF(DBG_SG1, "Goto - Scope reference frame target altitude %lf azimuth %lf", AltAz.altitude,
            AltAz.azimuth);
 
     GotoTargetMicrostepsDEC = int(AltAz.altitude * MICROSTEPS_PER_DEGREE);
@@ -192,7 +191,7 @@ bool ScopeSim::Goto(double ra, double dec)
     return true;
 }
 
-bool ScopeSim::initProperties()
+bool SG1::initProperties()
 {
     /* Make sure to init parent properties first */
     INDI::Telescope::initProperties();
@@ -208,7 +207,7 @@ bool ScopeSim::initProperties()
     return true;
 }
 
-bool ScopeSim::ISNewBLOB(const char *dev, const char *name, int sizes[], int blobsizes[], char *blobs[],
+bool SG1::ISNewBLOB(const char *dev, const char *name, int sizes[], int blobsizes[], char *blobs[],
                          char *formats[], char *names[], int n)
 {
     if (dev != nullptr && strcmp(dev, getDeviceName()) == 0)
@@ -220,7 +219,7 @@ bool ScopeSim::ISNewBLOB(const char *dev, const char *name, int sizes[], int blo
     return INDI::Telescope::ISNewBLOB(dev, name, sizes, blobsizes, blobs, formats, names, n);
 }
 
-bool ScopeSim::ISNewNumber(const char *dev, const char *name, double values[], char *names[], int n)
+bool SG1::ISNewNumber(const char *dev, const char *name, double values[], char *names[], int n)
 {
     //  first check if it's for our device
 
@@ -235,7 +234,7 @@ bool ScopeSim::ISNewNumber(const char *dev, const char *name, double values[], c
     return INDI::Telescope::ISNewNumber(dev, name, values, names, n);
 }
 
-bool ScopeSim::ISNewSwitch(const char *dev, const char *name, ISState *states, char *names[], int n)
+bool SG1::ISNewSwitch(const char *dev, const char *name, ISState *states, char *names[], int n)
 {
     if (dev != nullptr && strcmp(dev, getDeviceName()) == 0)
     {
@@ -247,7 +246,7 @@ bool ScopeSim::ISNewSwitch(const char *dev, const char *name, ISState *states, c
     return INDI::Telescope::ISNewSwitch(dev, name, states, names, n);
 }
 
-bool ScopeSim::ISNewText(const char *dev, const char *name, char *texts[], char *names[], int n)
+bool SG1::ISNewText(const char *dev, const char *name, char *texts[], char *names[], int n)
 {
     if (dev != nullptr && strcmp(dev, getDeviceName()) == 0)
     {
@@ -258,39 +257,59 @@ bool ScopeSim::ISNewText(const char *dev, const char *name, char *texts[], char 
     return INDI::Telescope::ISNewText(dev, name, texts, names, n);
 }
 
-bool ScopeSim::MoveNS(INDI_DIR_NS dir, TelescopeMotionCommand command)
+bool SG1::MoveNS(INDI_DIR_NS dir, TelescopeMotionCommand command)
 {
-    AxisDirection axisDir = (dir == DIRECTION_NORTH) ? FORWARD : REVERSE;
-    AxisStatus axisStat   = (command == MOTION_START) ? SLEWING : STOPPED;
+    double axisDir = (dir == DIRECTION_NORTH) ? 1 : -1;
 
-    AxisSlewRateDEC  = DEFAULT_SLEW_RATE;
-    AxisDirectionDEC = axisDir;
-    AxisStatusDEC    = axisStat;
+    if(command == MOTION_START){
+        RaConstRate += axisDir;
+        RaSlewNorth = dir == DIRECTION_NORTH;
+        RaSlewing = true;
+    }
+    else{
+        RaConstRate += (dir == DIRECTION_NORTH) ? -1 : 1;
+        RaSlewing = false;
+    }
+
+    SetConstRates(RaConstRate,DecConstRate);
 
     return true;
 }
 
-bool ScopeSim::MoveWE(INDI_DIR_WE dir, TelescopeMotionCommand command)
+bool SG1::MoveWE(INDI_DIR_WE dir, TelescopeMotionCommand command)
 {
-    AxisDirection axisDir = (dir == DIRECTION_WEST) ? FORWARD : REVERSE;
-    AxisStatus axisStat   = (command == MOTION_START) ? SLEWING : STOPPED;
+    double axisDir = (dir == DIRECTION_WEST) ? 1 : -1;
 
-    AxisSlewRateRA  = DEFAULT_SLEW_RATE;
-    AxisDirectionRA = axisDir;
-    AxisStatusRA    = axisStat;
+    if(command == MOTION_START){
+        DecConstRate += axisDir;
+        DecSlewWest = dir == DIRECTION_WEST;
+        DecSlewing = true;
+    }
+    else{
+        DecConstRate += DecSlewWest ? -1 : 1;
+        DecSlewing = false;
+    }
+
+    SetConstRates(RaConstRate,DecConstRate);
 
     return true;
 }
 
-bool ScopeSim::ReadScopeStatus()
+void SG1::QueryAxisPos(){
+ //TODO Query
+ #error("Implement Query!!!!")
+}
+
+bool SG1::ReadScopeStatus()
 {
-    INDI::IHorizontalCoordinates AltAz { CurrentEncoderMicrostepsRA / MICROSTEPS_PER_DEGREE, CurrentEncoderMicrostepsDEC / MICROSTEPS_PER_DEGREE };
+    QueryAxisPos();
+    INDI::IHorizontalCoordinates AltAz { CurrentRaAngle, CurrentDecAngle };
     TelescopeDirectionVector TDV = TelescopeDirectionVectorFromAltitudeAzimuth(AltAz);
     double RightAscension, Declination;
     if (!TransformTelescopeToCelestial(TDV, RightAscension, Declination))
     {
         if (TraceThisTick)
-            DEBUG(DBG_SIMULATOR, "ReadScopeStatus - TransformTelescopeToCelestial failed");
+            DEBUG(DBG_SG1, "ReadScopeStatus - TransformTelescopeToCelestial failed");
 
         TelescopeDirectionVector RotatedTDV(TDV);
 
@@ -298,12 +317,12 @@ bool ScopeSim::ReadScopeStatus()
         {
             case ZENITH:
                 if (TraceThisTick)
-                    DEBUG(DBG_SIMULATOR, "ReadScopeStatus - ApproximateMountAlignment ZENITH");
+                    DEBUG(DBG_SG1, "ReadScopeStatus - ApproximateMountAlignment ZENITH");
                 break;
 
             case NORTH_CELESTIAL_POLE:
                 if (TraceThisTick)
-                    DEBUG(DBG_SIMULATOR, "ReadScopeStatus - ApproximateMountAlignment NORTH_CELESTIAL_POLE");
+                    DEBUG(DBG_SG1, "ReadScopeStatus - ApproximateMountAlignment NORTH_CELESTIAL_POLE");
                 // Rotate the TDV coordinate system anticlockwise (positive) around the y axis by 90 minus
                 // the (positive)observatory latitude. The vector itself is rotated clockwise
                 RotatedTDV.RotateAroundY(90.0 - m_Location.latitude);
@@ -312,7 +331,7 @@ bool ScopeSim::ReadScopeStatus()
 
             case SOUTH_CELESTIAL_POLE:
                 if (TraceThisTick)
-                    DEBUG(DBG_SIMULATOR, "ReadScopeStatus - ApproximateMountAlignment SOUTH_CELESTIAL_POLE");
+                    DEBUG(DBG_SG1, "ReadScopeStatus - ApproximateMountAlignment SOUTH_CELESTIAL_POLE");
                 // Rotate the TDV coordinate system clockwise (negative) around the y axis by 90 plus
                 // the (negative)observatory latitude. The vector itself is rotated anticlockwise
                 RotatedTDV.RotateAroundY(-90.0 - m_Location.latitude);
@@ -328,14 +347,14 @@ bool ScopeSim::ReadScopeStatus()
     }
 
     if (TraceThisTick)
-        DEBUGF(DBG_SIMULATOR, "ReadScopeStatus - RA %lf hours DEC %lf degrees", RightAscension, Declination);
+        DEBUGF(DBG_SG1, "ReadScopeStatus - RA %lf hours DEC %lf degrees", RightAscension, Declination);
 
     NewRaDec(RightAscension, Declination);
 
     return true;
 }
 
-bool ScopeSim::Sync(double ra, double dec)
+bool SG1::Sync(double ra, double dec)
 {
     INDI::IHorizontalCoordinates AltAz { 0, 0 };
     AlignmentDatabaseEntry NewEntry;
@@ -364,219 +383,18 @@ bool ScopeSim::Sync(double ra, double dec)
     return false;
 }
 
-void ScopeSim::TimerHit()
+void SG1::SetConstRates(double RaRate, double DecRate){
+    //TODO SetRates
+    #error("Implement Set Rates!!!!")
+}
+
+void SG1::TimerHit()
 {
     TraceThisTickCount++;
     if (60 == TraceThisTickCount)
     {
         TraceThisTick      = true;
         TraceThisTickCount = 0;
-    }
-    // Simulate mount movement
-
-    static struct timeval ltv
-    {
-        0, 0
-    }; // previous system time
-    struct timeval tv
-    {
-        0, 0
-    };         // new system time
-    double dt;                 // Elapsed time in seconds since last tick
-
-    gettimeofday(&tv, nullptr);
-
-    if (ltv.tv_sec == 0 && ltv.tv_usec == 0)
-        ltv = tv;
-
-    dt  = tv.tv_sec - ltv.tv_sec + (tv.tv_usec - ltv.tv_usec) / 1e6;
-    ltv = tv;
-
-    // RA axis
-    long SlewSteps          = dt * AxisSlewRateRA;
-    bool CompleteRevolution = SlewSteps >= MICROSTEPS_PER_REVOLUTION;
-    SlewSteps               = SlewSteps % MICROSTEPS_PER_REVOLUTION; // Just in case ;-)
-
-    switch (AxisStatusRA)
-    {
-        case STOPPED:
-            // Do nothing
-            break;
-
-        case SLEWING:
-        {
-            DEBUGF(DBG_SIMULATOR,
-                   "TimerHit Slewing - RA Current Encoder %ld SlewSteps %ld Direction %d Target %ld Status %d",
-                   CurrentEncoderMicrostepsRA, SlewSteps, AxisDirectionRA, GotoTargetMicrostepsRA, AxisStatusRA);
-
-            // Update the encoder
-            if (FORWARD == AxisDirectionRA)
-                CurrentEncoderMicrostepsRA += SlewSteps;
-            else
-                CurrentEncoderMicrostepsRA -= SlewSteps;
-            if (CurrentEncoderMicrostepsRA < 0)
-                CurrentEncoderMicrostepsRA += MICROSTEPS_PER_REVOLUTION;
-            else if (CurrentEncoderMicrostepsRA >= MICROSTEPS_PER_REVOLUTION)
-                CurrentEncoderMicrostepsRA -= MICROSTEPS_PER_REVOLUTION;
-
-            DEBUGF(DBG_SIMULATOR, "TimerHit Slewing - RA New Encoder %d New Status %d", CurrentEncoderMicrostepsRA,
-                   AxisStatusRA);
-            break;
-        }
-
-        case SLEWING_TO:
-        {
-            DEBUGF(DBG_SIMULATOR,
-                   "TimerHit SlewingTo - RA Current Encoder %ld SlewSteps %ld Direction %d Target %ld Status %d",
-                   CurrentEncoderMicrostepsRA, SlewSteps, AxisDirectionRA, GotoTargetMicrostepsRA, AxisStatusRA);
-
-            long OldEncoder = CurrentEncoderMicrostepsRA;
-            // Update the encoder
-            if (FORWARD == AxisDirectionRA)
-                CurrentEncoderMicrostepsRA += SlewSteps;
-            else
-                CurrentEncoderMicrostepsRA -= SlewSteps;
-            if (CurrentEncoderMicrostepsRA < 0)
-                CurrentEncoderMicrostepsRA += MICROSTEPS_PER_REVOLUTION;
-            else if (CurrentEncoderMicrostepsRA >= MICROSTEPS_PER_REVOLUTION)
-                CurrentEncoderMicrostepsRA -= MICROSTEPS_PER_REVOLUTION;
-
-            if (CompleteRevolution)
-            {
-                // Must have found the target
-                AxisStatusRA               = STOPPED;
-                CurrentEncoderMicrostepsRA = GotoTargetMicrostepsRA;
-            }
-            else
-            {
-                bool FoundTarget = false;
-                if (FORWARD == AxisDirectionRA)
-                {
-                    if (CurrentEncoderMicrostepsRA < OldEncoder)
-                    {
-                        // Two ranges to search
-                        if ((GotoTargetMicrostepsRA >= OldEncoder) &&
-                                (GotoTargetMicrostepsRA <= MICROSTEPS_PER_REVOLUTION))
-                            FoundTarget = true;
-                        else if ((GotoTargetMicrostepsRA >= 0) &&
-                                 (GotoTargetMicrostepsRA <= CurrentEncoderMicrostepsRA))
-                            FoundTarget = true;
-                    }
-                    else if ((GotoTargetMicrostepsRA >= OldEncoder) &&
-                             (GotoTargetMicrostepsRA <= CurrentEncoderMicrostepsRA))
-                        FoundTarget = true;
-                }
-                else
-                {
-                    if (CurrentEncoderMicrostepsRA > OldEncoder)
-                    {
-                        // Two ranges to search
-                        if ((GotoTargetMicrostepsRA >= 0) && (GotoTargetMicrostepsRA <= OldEncoder))
-                            FoundTarget = true;
-                        else if ((GotoTargetMicrostepsRA >= CurrentEncoderMicrostepsRA) &&
-                                 (GotoTargetMicrostepsRA <= MICROSTEPS_PER_REVOLUTION))
-                            FoundTarget = true;
-                    }
-                    else if ((GotoTargetMicrostepsRA >= CurrentEncoderMicrostepsRA) &&
-                             (GotoTargetMicrostepsRA <= OldEncoder))
-                        FoundTarget = true;
-                }
-                if (FoundTarget)
-                {
-                    AxisStatusRA               = STOPPED;
-                    CurrentEncoderMicrostepsRA = GotoTargetMicrostepsRA;
-                }
-            }
-            DEBUGF(DBG_SIMULATOR, "TimerHit SlewingTo - RA New Encoder %d New Status %d", CurrentEncoderMicrostepsRA,
-                   AxisStatusRA);
-            break;
-        }
-    }
-
-    // DEC axis
-    SlewSteps = dt * AxisSlewRateDEC;
-
-    switch (AxisStatusDEC)
-    {
-        case STOPPED:
-            // Do nothing
-            break;
-
-        case SLEWING:
-        {
-            DEBUGF(DBG_SIMULATOR,
-                   "TimerHit Slewing - DEC Current Encoder %ld SlewSteps %d Direction %ld Target %ld Status %d",
-                   CurrentEncoderMicrostepsDEC, SlewSteps, AxisDirectionDEC, GotoTargetMicrostepsDEC, AxisStatusDEC);
-
-            // Update the encoder
-            SlewSteps = SlewSteps % MICROSTEPS_PER_REVOLUTION; // Just in case ;-)
-            if (FORWARD == AxisDirectionDEC)
-                CurrentEncoderMicrostepsDEC += SlewSteps;
-            else
-                CurrentEncoderMicrostepsDEC -= SlewSteps;
-            if (CurrentEncoderMicrostepsDEC > MAX_DEC)
-            {
-                CurrentEncoderMicrostepsDEC = MAX_DEC;
-                AxisStatusDEC               = STOPPED; // Hit the buffers
-                DEBUG(DBG_SIMULATOR, "TimerHit - DEC axis hit the buffers at MAX_DEC");
-            }
-            else if (CurrentEncoderMicrostepsDEC < MIN_DEC)
-            {
-                CurrentEncoderMicrostepsDEC = MIN_DEC;
-                AxisStatusDEC               = STOPPED; // Hit the buffers
-                DEBUG(DBG_SIMULATOR, "TimerHit - DEC axis hit the buffers at MIN_DEC");
-            }
-
-            DEBUGF(DBG_SIMULATOR, "TimerHit Slewing - DEC New Encoder %d New Status %d", CurrentEncoderMicrostepsDEC,
-                   AxisStatusDEC);
-            break;
-        }
-
-        case SLEWING_TO:
-        {
-            DEBUGF(DBG_SIMULATOR,
-                   "TimerHit SlewingTo - DEC Current Encoder %ld SlewSteps %d Direction %ld Target %ld Status %d",
-                   CurrentEncoderMicrostepsDEC, SlewSteps, AxisDirectionDEC, GotoTargetMicrostepsDEC, AxisStatusDEC);
-
-            // Calculate steps to target
-            int StepsToTarget;
-            if (FORWARD == AxisDirectionDEC)
-            {
-                if (CurrentEncoderMicrostepsDEC <= GotoTargetMicrostepsDEC)
-                    StepsToTarget = GotoTargetMicrostepsDEC - CurrentEncoderMicrostepsDEC;
-                else
-                    StepsToTarget = CurrentEncoderMicrostepsDEC - GotoTargetMicrostepsDEC;
-            }
-            else
-            {
-                // Axis in reverse
-                if (CurrentEncoderMicrostepsDEC >= GotoTargetMicrostepsDEC)
-                    StepsToTarget = CurrentEncoderMicrostepsDEC - GotoTargetMicrostepsDEC;
-                else
-                    StepsToTarget = GotoTargetMicrostepsDEC - CurrentEncoderMicrostepsDEC;
-            }
-            if (StepsToTarget <= SlewSteps)
-            {
-                // Target was hit this tick
-                AxisStatusDEC               = STOPPED;
-                CurrentEncoderMicrostepsDEC = GotoTargetMicrostepsDEC;
-            }
-            else
-            {
-                if (FORWARD == AxisDirectionDEC)
-                    CurrentEncoderMicrostepsDEC += SlewSteps;
-                else
-                    CurrentEncoderMicrostepsDEC -= SlewSteps;
-                if (CurrentEncoderMicrostepsDEC < 0)
-                    CurrentEncoderMicrostepsDEC += MICROSTEPS_PER_REVOLUTION;
-                else if (CurrentEncoderMicrostepsDEC >= MICROSTEPS_PER_REVOLUTION)
-                    CurrentEncoderMicrostepsDEC -= MICROSTEPS_PER_REVOLUTION;
-            }
-
-            DEBUGF(DBG_SIMULATOR, "TimerHit SlewingTo - DEC New Encoder %d New Status %d", CurrentEncoderMicrostepsDEC,
-                   AxisStatusDEC);
-            break;
-        }
     }
 
     INDI::Telescope::TimerHit(); // This will call ReadScopeStatus
@@ -591,7 +409,7 @@ void ScopeSim::TimerHit()
                 if (CoordSP.isSwitchOn("TRACK"))
                 {
                     // Goto has finished start tracking
-                    DEBUG(DBG_SIMULATOR, "TimerHit - Goto finished start tracking");
+                    DEBUG(DBG_SG1, "TimerHit - Goto finished start tracking");
                     TrackState = SCOPE_TRACKING;
                     // Fall through to tracking case
                 }
@@ -605,12 +423,9 @@ void ScopeSim::TimerHit()
 
         case SCOPE_TRACKING:
         {
-            // Continue or start tracking
-            // Calculate where the mount needs to be in POLLMS time
-            // POLLMS is hardcoded to be one second
-            // TODO may need to make this longer to get a meaningful result
             double JulianOffset = 1.0 / (24.0 * 60 * 60);
             TelescopeDirectionVector TDV;
+            
             INDI::IHorizontalCoordinates AltAz { 0, 0 };
 
             if (TransformCelestialToTelescope(CurrentTrackingTarget.rightascension, CurrentTrackingTarget.declination, JulianOffset,
@@ -631,7 +446,7 @@ void ScopeSim::TimerHit()
             // My altitude encoder runs -90 to +90
             if ((AltAz.altitude > 90.0) || (AltAz.altitude < -90.0))
             {
-                DEBUG(DBG_SIMULATOR, "TimerHit tracking - Altitude out of range");
+                DEBUG(DBG_SG1, "TimerHit tracking - Altitude out of range");
                 // This should not happen
                 return;
             }
@@ -639,87 +454,21 @@ void ScopeSim::TimerHit()
             // My polar encoder runs 0 to +360
             if ((AltAz.azimuth > 360.0) || (AltAz.azimuth < -360.0))
             {
-                DEBUG(DBG_SIMULATOR, "TimerHit tracking - Azimuth out of range");
+                DEBUG(DBG_SG1, "TimerHit tracking - Azimuth out of range");
                 // This should not happen
                 return;
             }
 
             if (AltAz.azimuth < 0.0)
             {
-                DEBUG(DBG_SIMULATOR, "TimerHit tracking - Azimuth negative");
+                DEBUG(DBG_SG1, "TimerHit tracking - Azimuth negative");
                 AltAz.azimuth = 360.0 + AltAz.azimuth;
             }
 
-            long AltitudeOffsetMicrosteps = int(AltAz.altitude * MICROSTEPS_PER_DEGREE - CurrentEncoderMicrostepsDEC);
-            long AzimuthOffsetMicrosteps  = int(AltAz.azimuth * MICROSTEPS_PER_DEGREE - CurrentEncoderMicrostepsRA);
+            double RaSlew = RaSlewing ? (RaSlewNorth ? 1 : -1) : 0;
+            double DecSlew = DecSlewing ? (DecSlewWest ? 1 : -1) : 0;
 
-            DEBUGF(DBG_SIMULATOR, "TimerHit - Tracking AltitudeOffsetMicrosteps %d AzimuthOffsetMicrosteps %d",
-                   AltitudeOffsetMicrosteps, AzimuthOffsetMicrosteps);
-
-            if (0 != AzimuthOffsetMicrosteps)
-            {
-                // Calculate the slewing rates needed to reach that position
-                // at the correct time. This is simple as interval is one second
-                if (AzimuthOffsetMicrosteps > 0)
-                {
-                    if (AzimuthOffsetMicrosteps < MICROSTEPS_PER_REVOLUTION / 2.0)
-                    {
-                        // Forward
-                        AxisDirectionRA = FORWARD;
-                        AxisSlewRateRA  = AzimuthOffsetMicrosteps;
-                    }
-                    else
-                    {
-                        // Reverse
-                        AxisDirectionRA = REVERSE;
-                        AxisSlewRateRA  = MICROSTEPS_PER_REVOLUTION - AzimuthOffsetMicrosteps;
-                    }
-                }
-                else
-                {
-                    AzimuthOffsetMicrosteps = std::abs(AzimuthOffsetMicrosteps);
-                    if (AzimuthOffsetMicrosteps < MICROSTEPS_PER_REVOLUTION / 2.0)
-                    {
-                        // Forward
-                        AxisDirectionRA = REVERSE;
-                        AxisSlewRateRA  = AzimuthOffsetMicrosteps;
-                    }
-                    else
-                    {
-                        // Reverse
-                        AxisDirectionRA = FORWARD;
-                        AxisSlewRateRA  = MICROSTEPS_PER_REVOLUTION - AzimuthOffsetMicrosteps;
-                    }
-                }
-                AxisSlewRateRA  = std::abs(AzimuthOffsetMicrosteps);
-                AxisDirectionRA = AzimuthOffsetMicrosteps > 0 ? FORWARD : REVERSE; // !!!! BEWARE INERTIA FREE MOUNT
-                AxisStatusRA    = SLEWING;
-                DEBUGF(DBG_SIMULATOR, "TimerHit - Tracking AxisSlewRateRA %lf AxisDirectionRA %d", AxisSlewRateRA,
-                       AxisDirectionRA);
-            }
-            else
-            {
-                // Nothing to do - stop the axis
-                AxisStatusRA = STOPPED; // !!!! BEWARE INERTIA FREE MOUNT
-                DEBUG(DBG_SIMULATOR, "TimerHit - Tracking nothing to do stopping RA axis");
-            }
-
-            if (0 != AltitudeOffsetMicrosteps)
-            {
-                // Calculate the slewing rates needed to reach that position
-                // at the correct time.
-                AxisSlewRateDEC  = std::abs(AltitudeOffsetMicrosteps);
-                AxisDirectionDEC = AltitudeOffsetMicrosteps > 0 ? FORWARD : REVERSE; // !!!! BEWARE INERTIA FREE MOUNT
-                AxisStatusDEC    = SLEWING;
-                DEBUGF(DBG_SIMULATOR, "TimerHit - Tracking AxisSlewRateDEC %lf AxisDirectionDEC %d", AxisSlewRateDEC,
-                       AxisDirectionDEC);
-            }
-            else
-            {
-                // Nothing to do - stop the axis
-                AxisStatusDEC = STOPPED; // !!!! BEWARE INERTIA FREE MOUNT
-                DEBUG(DBG_SIMULATOR, "TimerHit - Tracking nothing to do stopping DEC axis");
-            }
+            SetConstRates(AltAz.azimuth-CurrentRaAngle+RaSlew,AltAz.altitude-CurrentDecAngle+DecSlew);
 
             break;
         }
@@ -731,7 +480,7 @@ void ScopeSim::TimerHit()
     TraceThisTick = false;
 }
 
-bool ScopeSim::updateLocation(double latitude, double longitude, double elevation)
+bool SG1::updateLocation(double latitude, double longitude, double elevation)
 {
     UpdateLocation(latitude, longitude, elevation);
     return true;

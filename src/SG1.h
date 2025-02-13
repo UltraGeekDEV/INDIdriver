@@ -4,10 +4,10 @@
 #include "inditelescope.h"
 #include "alignment/AlignmentSubsystemForDrivers.h"
 
-class ScopeSim : public INDI::Telescope, public INDI::AlignmentSubsystem::AlignmentSubsystemForDrivers
+class SG1 : public INDI::Telescope, public INDI::AlignmentSubsystem::AlignmentSubsystemForDrivers
 {
     public:
-        ScopeSim();
+        SG1();
 
     protected:
         bool Abort() override;
@@ -30,35 +30,26 @@ class ScopeSim : public INDI::Telescope, public INDI::AlignmentSubsystem::Alignm
         bool updateLocation(double latitude, double longitude, double elevation) override;
 
     private:
-        static constexpr long MICROSTEPS_PER_REVOLUTION { 1000000 };
-        static constexpr double MICROSTEPS_PER_DEGREE { MICROSTEPS_PER_REVOLUTION / 360.0 };
-        static constexpr double DEFAULT_SLEW_RATE { MICROSTEPS_PER_DEGREE * 2.0 };
-        static constexpr long MAX_DEC { (long)(90.0 * MICROSTEPS_PER_DEGREE) };
-        static constexpr long MIN_DEC { (long)(-90.0 * MICROSTEPS_PER_DEGREE) };
-
+        void QueryAxisPos();
+        void SetConstRates(double RaRate,double DecRate);
         enum AxisStatus
         {
             STOPPED,
             SLEWING,
             SLEWING_TO
         };
-        enum AxisDirection
-        {
-            FORWARD,
-            REVERSE
-        };
 
         AxisStatus AxisStatusDEC { STOPPED };
-        AxisDirection AxisDirectionDEC { FORWARD };
-        double AxisSlewRateDEC { DEFAULT_SLEW_RATE };
-        long CurrentEncoderMicrostepsDEC { 0 };
-        long GotoTargetMicrostepsDEC { 0 };
+        double CurrentDecAngle { 0 };
+        double DecConstRate { 0 };
+        bool DecSlewWest { true };
+        bool DecSlewing { false };
 
         AxisStatus AxisStatusRA { STOPPED };
-        AxisDirection AxisDirectionRA { FORWARD };
-        double AxisSlewRateRA { DEFAULT_SLEW_RATE };
-        long CurrentEncoderMicrostepsRA { 0 };
-        long GotoTargetMicrostepsRA { 0 };
+        double CurrentRaAngle { 0 };
+        double RaConstRate { 0 };
+        bool RaSlewNorth { true };
+        bool RaSlewing { false };
 
         // Tracking
         INDI::IEquatorialCoordinates CurrentTrackingTarget { 0, 0 };
@@ -67,5 +58,5 @@ class ScopeSim : public INDI::Telescope, public INDI::AlignmentSubsystem::Alignm
         int TraceThisTickCount { 0 };
         bool TraceThisTick { false };
 
-        unsigned int DBG_SIMULATOR { 0 };
+        unsigned int DBG_SG1 { 0 };
 };
