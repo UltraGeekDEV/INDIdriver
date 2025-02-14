@@ -17,6 +17,13 @@
 
 #include <memory>
 
+#include <cstring>
+#include <errno.h>
+#include <fcntl.h>
+#include <iostream>
+#include <termios.h>
+#include <unistd.h>
+
 using namespace INDI::AlignmentSubsystem;
 
 // We declare an auto pointer to SG1.
@@ -25,6 +32,63 @@ std::unique_ptr<SG1> telescope_sim(new SG1());
 SG1::SG1() : DBG_SG1(INDI::Logger::getInstance().addDebugLevel("SG1 status","SG1"))
 {
 }
+
+int openSerialPort(const char* portname)
+{
+    int fd = open(portname, O_RDWR | O_NOCTTY | O_SYNC);
+    if (fd < 0) {
+        return -1;
+    }
+    return fd;
+}
+
+bool configureSerialPort(int fd, int speed)
+{
+    struct termios tty;
+    if (tcgetattr(fd, &tty) != 0) {
+        return false;
+    }
+
+    cfsetospeed(&tty, speed);
+    cfsetispeed(&tty, speed);
+
+    tty.c_cflag
+        = (tty.c_cflag & ~CSIZE) | CS8; // 8-bit characters
+    tty.c_iflag &= ~IGNBRK; // disable break processing
+    tty.c_lflag = 0; // no signaling chars, no echo, no
+                     // canonical processing
+    tty.c_oflag = 0; // no remapping, no delays
+    tty.c_cc[VMIN] = 1; // read doesn't block
+    tty.c_cc[VTIME] = 0; // 0.5 seconds read timeout
+
+    tty.c_iflag &= ~(IXON | IXOFF
+                     | IXANY); // shut off xon/xoff ctrl
+
+    tty.c_cflag
+        |= (CLOCAL | CREAD); // ignore modem controls,
+                             // enable reading
+    tty.c_cflag &= ~(PARENB | PARODD); // shut off parity
+    tty.c_cflag &= ~CSTOPB;
+    tty.c_cflag &= ~CRTSCTS;
+
+    if (tcsetattr(fd, TCSANOW, &tty) != 0) {
+        return false;
+    }
+    return true;
+}
+
+int readFromSerialPort(int fd, char* buffer, size_t size)
+{
+    return read(fd, buffer, size);
+}
+
+int writeToSerialPort(int fd, const char* buffer,
+    size_t size)
+{
+    return write(fd, buffer, size);
+}
+
+void closeSerialPort(int fd) { close(fd); }
 
 bool SG1::Abort()
 {
@@ -60,13 +124,17 @@ bool SG1::Abort()
     return true;
 }
 
-bool SG1::canSync()
-{
-    return true;
-}
-
 bool SG1::Connect()
 {
+    SerialPort = openSerialPort("/dev/ttyUSB0");
+    if(SerialPort == -1){
+        return false;
+    }
+
+    if(!configureSerialPort(SerialPort,9600)){
+        return false;
+    }
+
     SetTimer(200);
     return true;
 }
@@ -81,20 +149,29 @@ const char *SG1::getDefaultName()
     return (const char *)"Simple Telescope Simulator";
 }
 
+void SG1::SlewTo(double Ra,double Dec){
+
+    Vector2 pos;
+    pos.x = Ra;
+    pos.y = Dec;
+
+    SendCommand command;
+    command.action = ActionType::GoTo;
+    command.bufLen = sizeof(Vector2);
+    command.buf = (uint8_t*)&pos;
+
+    auto commandBaseLen = sizeof(ActionType)+sizeof(uint8_t);
+    char byteData[command.bufLen+commandBaseLen];
+    memcpy(byteData,&command,commandBaseLen);
+    memcpy(byteData+commandBaseLen,command.buf,command.bufLen);
+
+    writeToSerialPort(SerialPort,byteData,commandBaseLen+command.bufLen);
+}
+
 bool SG1::Goto(double ra, double dec)
 {
     DEBUGF(DBG_SG1, "Goto - Celestial reference frame target right ascension %lf(%lf) declination %lf",
            ra * 360.0 / 24.0, ra, dec);
-
-    if (CoordSP.isSwitchOn("TRACK"))
-    {
-        char RAStr[32], DecStr[32];
-        fs_sexa(RAStr, ra, 2, 3600);
-        fs_sexa(DecStr, dec, 2, 3600);
-        CurrentTrackingTarget.rightascension  = ra;
-        CurrentTrackingTarget.declination = dec;
-        DEBUG(DBG_SG1, "Goto - tracking requested");
-    }
 
     // Call the alignment subsystem to translate the celestial reference frame coordinate
     // into a telescope reference frame coordinate
@@ -159,34 +236,8 @@ bool SG1::Goto(double ra, double dec)
     DEBUGF(DBG_SG1, "Goto - Scope reference frame target altitude %lf azimuth %lf", AltAz.altitude,
            AltAz.azimuth);
 
-    GotoTargetMicrostepsDEC = int(AltAz.altitude * MICROSTEPS_PER_DEGREE);
-    if (GotoTargetMicrostepsDEC == CurrentEncoderMicrostepsDEC)
-        AxisStatusDEC = STOPPED;
-    else
-    {
-        if (GotoTargetMicrostepsDEC > CurrentEncoderMicrostepsDEC)
-            AxisDirectionDEC = FORWARD;
-        else
-            AxisDirectionDEC = REVERSE;
-        AxisStatusDEC = SLEWING_TO;
-    }
-    GotoTargetMicrostepsRA = int(AltAz.azimuth * MICROSTEPS_PER_DEGREE);
-    if (GotoTargetMicrostepsRA == CurrentEncoderMicrostepsRA)
-        AxisStatusRA = STOPPED;
-    else
-    {
-        if (GotoTargetMicrostepsRA > CurrentEncoderMicrostepsRA)
-            AxisDirectionRA = (GotoTargetMicrostepsRA - CurrentEncoderMicrostepsRA) < MICROSTEPS_PER_REVOLUTION / 2.0 ?
-                              FORWARD :
-                              REVERSE;
-        else
-            AxisDirectionRA = (CurrentEncoderMicrostepsRA - GotoTargetMicrostepsRA) < MICROSTEPS_PER_REVOLUTION / 2.0 ?
-                              REVERSE :
-                              FORWARD;
-        AxisStatusRA = SLEWING_TO;
-    }
-
-    TrackState = SCOPE_SLEWING;
+    
+    SlewTo(AltAz.azimuth,AltAz.altitude);
 
     return true;
 }
@@ -200,6 +251,7 @@ bool SG1::initProperties()
 
     /* Add debug controls so we may debug driver if necessary */
     addDebugControl();
+
 
     // Add alignment properties
     InitAlignmentProperties(this);
@@ -296,8 +348,19 @@ bool SG1::MoveWE(INDI_DIR_WE dir, TelescopeMotionCommand command)
 }
 
 void SG1::QueryAxisPos(){
- //TODO Query
- #error("Implement Query!!!!")
+    SendCommand command;
+    command.action = ActionType::SetConstantRate;
+    command.bufLen = 0;
+    command.buf = nullptr;
+
+    auto commandBaseLen = sizeof(ActionType)+sizeof(uint8_t);
+    char byteData[commandBaseLen];
+    memcpy(byteData,&command,commandBaseLen);
+
+    writeToSerialPort(SerialPort,byteData,commandBaseLen+command.bufLen);
+
+    char recievedData[sizeof(QueryReport)];
+    readFromSerialPort(SerialPort,recievedData,sizeof(QueryReport));
 }
 
 bool SG1::ReadScopeStatus()
@@ -356,11 +419,12 @@ bool SG1::ReadScopeStatus()
 
 bool SG1::Sync(double ra, double dec)
 {
+    QueryAxisPos();
     INDI::IHorizontalCoordinates AltAz { 0, 0 };
     AlignmentDatabaseEntry NewEntry;
 
-    AltAz.altitude = double(CurrentEncoderMicrostepsDEC) / MICROSTEPS_PER_DEGREE;
-    AltAz.azimuth  = double(CurrentEncoderMicrostepsRA) / MICROSTEPS_PER_DEGREE;
+    AltAz.altitude = CurrentDecAngle;
+    AltAz.azimuth  = CurrentRaAngle;
 
     NewEntry.ObservationJulianDate = ln_get_julian_from_sys();
     NewEntry.RightAscension        = ra;
@@ -384,8 +448,21 @@ bool SG1::Sync(double ra, double dec)
 }
 
 void SG1::SetConstRates(double RaRate, double DecRate){
-    //TODO SetRates
-    #error("Implement Set Rates!!!!")
+    Vector2 pos;
+    pos.x = RaRate;
+    pos.y = DecRate;
+
+    SendCommand command;
+    command.action = ActionType::SetConstantRate;
+    command.bufLen = sizeof(Vector2);
+    command.buf = (uint8_t*)&pos;
+
+    auto commandBaseLen = sizeof(ActionType)+sizeof(uint8_t);
+    char byteData[command.bufLen+commandBaseLen];
+    memcpy(byteData,&command,commandBaseLen);
+    memcpy(byteData+commandBaseLen,command.buf,command.bufLen);
+
+    writeToSerialPort(SerialPort,byteData,commandBaseLen+command.bufLen);
 }
 
 void SG1::TimerHit()

@@ -11,7 +11,6 @@ class SG1 : public INDI::Telescope, public INDI::AlignmentSubsystem::AlignmentSu
 
     protected:
         bool Abort() override;
-        bool canSync();
         bool Connect() override;
         bool Disconnect() override;
         const char *getDefaultName() override;
@@ -32,6 +31,7 @@ class SG1 : public INDI::Telescope, public INDI::AlignmentSubsystem::AlignmentSu
     private:
         void QueryAxisPos();
         void SetConstRates(double RaRate,double DecRate);
+        void SlewTo(double RaRate,double DecRate);
         enum AxisStatus
         {
             STOPPED,
@@ -53,10 +53,44 @@ class SG1 : public INDI::Telescope, public INDI::AlignmentSubsystem::AlignmentSu
 
         // Tracking
         INDI::IEquatorialCoordinates CurrentTrackingTarget { 0, 0 };
-
         // Tracing in timer tick
         int TraceThisTickCount { 0 };
         bool TraceThisTick { false };
 
+        int SerialPort {-1};
+
         unsigned int DBG_SG1 { 0 };
+
+        enum class ActionType : uint8_t
+        {
+            SetConstantRate,
+            Sync,
+            GoTo,
+            ReportAxis,
+            Dither,
+            Guide
+        };
+
+        struct Vector2{
+            double x;
+            double y;
+        };
+
+        struct SendCommand{
+            ActionType action;
+            uint8_t bufLen;
+            uint8_t* buf;
+        };
+
+        enum class MountStatus{
+            Idle,
+            Tracking,
+            Slewing
+        };
+
+        struct QueryReport{
+            MountStatus status;
+            double RaAngle;
+            double DecAngle;
+          };
 };
